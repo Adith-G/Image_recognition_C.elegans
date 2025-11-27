@@ -5,6 +5,7 @@ import numpy as np
 import os
 import pandas as pd
 from datetime import datetime
+from collections import Counter
 
 
 
@@ -14,7 +15,7 @@ os.makedirs("traning_data", exist_ok= True)
 
 model = YOLO(r"C:\Users\adith\Documents\yolo\my_model\my_model.pt")
 
-st.title("What's your Monster?")
+st.title("Egg Analysis Tool")
 
 
 st.header("Run the Analysis")
@@ -28,6 +29,9 @@ if uploaded:
     results = model(img)
     annotated = results[0].plot()
 
+    object_count = len(results[0].boxes)
+    st.write(f"**Objects detected:** {object_count}")
+
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     original_path = f"output/images/{ts}_original.jpg"
@@ -37,12 +41,28 @@ if uploaded:
     cv2.imwrite(original_path, img)
     cv2.imwrite(annotated_path, annotated)
 
-    boxes = results[0].boxes.data.cpu().numpy()
-    df = pd.DataFrame(
-        boxes,
-        columns=["xmin", "ymin", "xmax", "ymax", "confidence", "label"]
-    )
+    detections = results[0].boxes
+
+    labels = [model.names[int(box.cls)] for box in detections]
+    confidences = [float(box.conf) for box in detections]
+
+    class_counts = Counter(labels)
+
+
+    df = pd.DataFrame({
+    "Object_Name": labels,
+    "Confidence(%)": [round(c*100,2) for c in confidences]
+    })
+    df["Total_Objects_in_this_class"] = df["Object_Name"].map(class_counts)
     df.to_csv(csv_path, index=False)
+
+    st.subheader("🧾 Object Summary")
+    for obj, count in class_counts.items():
+        st.write(f"**{obj} : {count} detected**")
+
+    st.subheader("Detection Details")
+    st.dataframe(df)
+    
 
     st.image(annotated, channels="BGR")
 
@@ -50,7 +70,7 @@ if uploaded:
 
 
     st.download_button(
-        label="⬇ Download Detection CSV",
+        label="⬇ Download CSV",
         data=df.to_csv(index=False).encode("utf-8"),
         file_name=f"prediction_{ts}.csv",
         mime="text/csv"
@@ -75,7 +95,7 @@ if training_uploads:
     for file in training_uploads:
         ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
 
-        save_path = f"training_data{ts}_{file.name.replace(' ', '_')}"
+        save_path = f"traning_data{ts}_{file.name.replace(' ', '_')}"
         bytes_data = file.read()
 
         with open(save_path, "wb") as f:
